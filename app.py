@@ -8,6 +8,7 @@ import speech_recognition as sr
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
+from brain.hands import execute_action
 from brain.router import classify_intent
 from brain.tools import search_internet
 from brain.vision import analyze_image
@@ -150,6 +151,12 @@ if user_final_input:
 		with st.chat_message("assistant"):
 			with st.spinner("Aley đang suy nghĩ..."):
 				intent = classify_intent(user_final_input)
+
+			if intent == "ACTION":
+				st.caption("Quyết định hành động")
+				with st.spinner("Đang thao tác..."):
+					action_result = execute_action(user_final_input)
+					final_answer = action_result
 
 			if intent == "WEB":
 				st.caption("🌐 Quyết định: Tìm kiếm Internet")

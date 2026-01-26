@@ -4,11 +4,12 @@ def classify_intent(prompt):
 	system_prompt = """
 	Bạn là một AI Router thông minh. Nhiệm vụ của bạn là phân loại câu hỏi của người dùng vào 1 trong 3 nhóm sau:
     
-    1. WEB: Nếu câu hỏi cần thông tin thực tế, mới nhất (thời tiết, giá vàng, tin tức, ai là, sự kiện năm nay...).
-    2. MEMORY: Nếu câu hỏi liên quan đến thông tin cá nhân, tài liệu đã upload, "tôi là ai", "trong file có gì".
-    3. CHAT: Các trường hợp còn lại (chào hỏi, viết code, dịch thuật, giải toán, suy luận logic).
+    1. ACTION: Nếu người dùng yêu cầu thực hiện hành động trên máy tính (mở nhạc, mở web, mở app, xem giờ, tắt máy...).
+    2. WEB: Nếu hỏi thông tin thực tế cần tra cứu (thời tiết, giá vàng, tin tức...).
+    3. MEMORY: Nếu hỏi về bản thân AI hoặc tài liệu đã học.
+    4. CHAT: Các cuộc trò chuyện xã giao, giải thích, code, dịch thuật.
     
-    CHỈ TRẢ VỀ ĐÚNG 1 TỪ KHÓA: "WEB", "MEMORY" HOẶC "CHAT". KHÔNG GIẢI THÍCH GÌ THÊM.
+    CHỈ TRẢ VỀ 1 TỪ: "ACTION", "WEB", "MEMORY", HOẶC "CHAT".
     """
 	try:
 		response = ollama.chat(
@@ -20,7 +21,9 @@ def classify_intent(prompt):
 		)
 
 		decision = response['message']['content'].strip().upper()
+		print(f"Router đã chọn: {decision}")
 
+		if "ACTION" in decision: return "ACTION"
 		if "WEB" in decision: return "WEB"
 		if "MEMORY" in decision: return "MEMORY"
 		return "CHAT"
