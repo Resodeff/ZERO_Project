@@ -22,7 +22,7 @@ def load_memory():
 		collection_name = "Aley_memories"
 	)
 
-	return vector_db
+	return vector_db 
 
 def save_to_memory(vector_db, file_path):
 	if file_path.endswith(".pdf"):

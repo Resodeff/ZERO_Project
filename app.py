@@ -1,12 +1,16 @@
-from gtts import gTTS
+import edge_tts
+import asyncio
 import tempfile
 import streamlit as st
-from streamlit_mic_recorder import mic_recorder
 import os
 import io
 import speech_recognition as sr
+import time
+from gtts import gTTS
+from streamlit_mic_recorder import mic_recorder
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langdetect import detect
 
 from brain.hands import execute_action
 from brain.router import classify_intent
@@ -18,6 +22,16 @@ from brain.memory import load_memory, save_to_memory, search_memory, save_histor
 
 st.set_page_config(page_title="ZERO - Ai Companion", page_icon="✨")
 st.title("ZERO ✨")
+
+def detect_language(text):
+	try:
+		lang = detect(text)
+		if lang == "vi":
+			return "vi"
+		else:
+			return "en"
+	except:
+		return "vi"
 
 def speech_to_text(audio_bytes):
 	r = sr.Recognizer()
@@ -34,15 +48,56 @@ def speech_to_text(audio_bytes):
 			st.error("Lỗi kết nối Google Speech API")
 			return ""
 
+async def generate_edge_audio(text, lang_code):
+	if lang_code == 'vi':
+		voice = 'vi-VN-NamMinhNeural'
+	else:
+		voice = 'en-US-ChristopherNeural'
+
+	communicate = edge_tts.Communicate(text, voice)
+
+	temp_filename = "temp_audio_edge.mp3"
+	await communicate.save(temp_filename)
+	return temp_filename
+
 def text_to_speech(text):
 	try:
-		tts = gTTS(text=text, lang='vi')
-		with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-			temp_path = fp.name
-			tts.save(temp_path)
-		st.audio(temp_path, format="audio/mp3")
+		lang_code = detect_language(text)
+		try:
+			loop = asyncio.get_event_loop()
+		except RuntimeError:
+			loop = asyncio.new_event_loop()
+			asyncio.set_event_loop(loop)
+
+		audio_file = loop.run_until_complete(generate_edge_audio(text, lang_code))
+		st.audio(audio_file, format = "audio/mp3")
 	except Exception as e:
 		st.error(f"Lỗi âm thanh: {e}")
+
+SECRET_PASSWORD = "123"
+def check_passsword():
+	if "password_correct" not in st.session_state:
+		st.session_state.password_correct = False
+	if st.session_state.password_correct:
+		return True
+	st.text_input(
+		"Enter password",
+		type = "password",
+		key = "password_input",
+		on_change = password_entered
+	)
+	return False
+
+def password_entered():
+	if st.session_state["password_input"] == SECRET_PASSWORD:
+		st.session_state.password_correct = True
+		del st.session_state["password_input"]
+	else:
+		st.session_state.password_correct = False
+		st.error("Wrong! please enter password again...")
+
+if not check_passsword():
+	st.stop()
 
 with st.sidebar:
 	st.header("📂 Nạp kiến thức")
@@ -76,7 +131,7 @@ with st.sidebar:
 		)
 	st.markdown("---")
 	st.header("📷 Gửi ảnh")
-	uploaded_image = st.file_uploader("Chọn ảnh...", type=['ipg', 'jpeg', 'png'])
+	uploaded_image = st.file_uploader("Chọn ảnh...", type=['jpg', 'jpeg', 'png'])
 
 	if uploaded_image:
 		st.image(uploaded_image, caption="Ảnh bạn gửi", use_container_width=True)
@@ -92,18 +147,14 @@ def get_memory_db():
 llm = get_model()
 memory_db = get_memory_db()
 
-prompt_template = """
-System: {system_prompt}
-
-ký ức lên quan {thông tin từ quá khứ}: {context}
-
-Human: {input}
-"""
-
 prompt = ChatPromptTemplate.from_messages([
 	("system", "{system_prompt}"),
 	("human", """
 	thông tin ký ức (Memory): {context}
+	
+	YÊU CẦU: dựa vào content trên, hãy trả lời câu hỏi của người dùng
+	LƯU Ý: nếu câu hỏi là Tiếng Việt, thì phản hồi lại Tiếng Việt
+
 	human: {input}
 	 """)
 	])
@@ -145,7 +196,6 @@ if user_final_input:
 				response = analyze_image(image_bytes, user_final_input)
 				st.write(response)
 				text_to_speech(response)
-
 				final_answer = response
 	else:
 		with st.chat_message("assistant"):
@@ -156,45 +206,54 @@ if user_final_input:
 				st.caption("Quyết định hành động")
 				with st.spinner("Đang thao tác..."):
 					action_result = execute_action(user_final_input)
+					st.write(action_result)
+					text_to_speech(action_result)
 					final_answer = action_result
-
-			if intent == "WEB":
-				st.caption("🌐 Quyết định: Tìm kiếm Internet")
-			elif intent == "MEMORY":
-				st.caption("🧠 Quyết định: Tra cứu ký ức/Tài liệu")
 			else:
-				st.caption("💬 Quyết định: Trò chuyện logic")
+				context_str = ""
+				source_note = ""
 
-			context_str = ""
-			source_note = ""
-
-			with st.spinner("Đang thực hiện..."):
 				if intent == "WEB":
-					search_result = search_internet(user_final_input)
-					context_str = search_result
-					source_note = "\n\n(Tìm thấy từ Internet)"
+					st.caption("🌐 Quyết định: Tìm kiếm Internet")
 				elif intent == "MEMORY":
-					past_memories = search_memory(memory_db, user_final_input)
-					if past_memories:
-						context_str = "\n\n".join(past_memories)
-						source_note = "\n\n(Trích xuất từ ký ức)"
-					else:
-						context_str = "Không tìm thấy trong bộ nhớ"
+					st.caption("🧠 Quyết định: Tra cứu ký ức/Tài liệu")
 				else:
-					context_str = "Không cần thông tin bên ngoài"
-					source_note = ""
+					st.caption("💬 Quyết định: Trò chuyện logic")
 
-				full_response = chain.invoke({
-					"system_prompt": computer,
-					"context": context_str,
-					"input": user_final_input
-				})
+				with st.spinner("Đang thực hiện..."):
+					if intent == "WEB":
+						search_result = search_internet(user_final_input)
+						context_str = search_result
+						source_note = "\n\n(Tìm thấy từ Internet)"
+					elif intent == "MEMORY":
+						past_memories = search_memory(memory_db, user_final_input)
+						if past_memories:
+							context_str = "\n\n".join(past_memories)
+							source_note = "\n\n(Trích xuất từ ký ức)"
+						else:
+							context_str = "Không tìm thấy trong bộ nhớ"
+					else:
+						st.caption("Quyết định: Trò chuyện")
+						context_str = "Không cần thông tin bên ngoài"
+				
+				with st.spinner("Đang soạn câu trả lời..."):
+					response_placeholder = st.empty()
+					full_response = ""
+					chunks = chain.stream({
+						"system_prompt": computer,
+						"context": context_str,
+						"input": user_final_input
+					})
 
-				final_answer = full_response + source_note
+					for chunk in chunks:
+						full_response += chunk
+						response_placeholder.markdown(full_response + "")
 
-				st.write(final_answer)
-				text_to_speech(final_answer)
+					final_answer = full_response + source_note
+					response_placeholder.markdown(final_answer)
+					text_to_speech(final_answer)
 
 	if final_answer:
 		st.session_state.messages.append({"role": "assistant", "content": final_answer})
-		save_history_to_memory(memory_db, final_answer)
+		save_history_to_memory(memory_db, f"User: {user_final_input}")
+		save_history_to_memory(memory_db, f"Ai: {final_answer}")
