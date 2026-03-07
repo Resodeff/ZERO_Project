@@ -1,7 +1,7 @@
 import sys
 try:
-	__import__('pyslite3')
-	sys.modules['slite3'] = sys.modules.pop('pyslite3')
+	__import__('pysqlite3')
+	sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 except ImportError:
 	pass
 
@@ -41,6 +41,6 @@ def save_to_memory(vector_db, file_path):
 def save_history_to_memory(vector_db, text):
 	vector_db.add_texts(texts=[text])
 
-def search_memory(vector_db, query, k=3):
+def search_memory(vector_db, query, k=5):
 	results = vector_db.similarity_search(query, k = k)
 	return [doc.page_content for doc in results]

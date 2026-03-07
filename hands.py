@@ -97,8 +97,20 @@ def system_power(action):
         return "Đã hủy lệnh tắt máy."
 
 def execute_action(user_prompt):
-
     prompt_lower = user_prompt.lower()
+
+    music_keywords = ["mở nhạc", "bài hát", "nghe bài", "youtube"]
+    if any(k in prompt_lower for k in music_keywords):
+        song_name = prompt_lower
+        for k in music_keywords:
+            song_name = song_name.replace(k, "")
+        
+        song_name = song_name.strip()
+        
+        if song_name:
+            return play_music_on_youtube(song_name)
+        else:
+            return open_website("https://www.youtube.com")
 
     for keywords, func in ACTIONS.items():
         if any(k in prompt_lower for k in keywords):
@@ -106,7 +118,7 @@ def execute_action(user_prompt):
                 return func()
             except Exception as e:
                 return f"Lỗi thực thi {e}"
-
+            
     print("Lệnh phức tạp -> gọi llama3...")
 
     system_prompt = """
@@ -125,6 +137,7 @@ def execute_action(user_prompt):
         
         content = response['message']['content'].strip()
         print(f"Đang suy nghĩ {content}")
+        
         start = content.find('{')
         end = content.rfind('}') + 1
         
